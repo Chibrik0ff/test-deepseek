@@ -32,28 +32,54 @@ jobs:
           python - <<EOF
           import requests
           import os
+          import json
 
           # Читаем текущий README.md
           with open("README.md", "r", encoding="utf-8") as f:
               current_text = f.read()
 
+          print("Текущий текст прочитан. Длина:", len(current_text))
+
           # Отправляем запрос в DeepSeek
+          headers = {
+              "Authorization": f"Bearer {os.environ['DEEPSEEK_API_KEY']}",
+              "Content-Type": "application/json"
+          }
+          
+          payload = {
+              "model": "deepseek-chat",
+              "messages": [
+                  {"role": "system", "content": "Ты меняешь только содержимое файла README.md. Возвращаешь только новый полный текст файла без лишних пояснений."},
+                  {"role": "user", "content": f"Текущее содержимое файла:\n---\n{current_text}\n---\n\nЗадача: {os.environ['INSTRUCTION']}\n\nНапиши новый полный текст файла с учётом задачи."}
+              ]
+          }
+          
+          print("Отправляю запрос в DeepSeek API...")
           response = requests.post(
               "https://api.deepseek.com/v1/chat/completions",
-              headers={"Authorization": f"Bearer {os.environ['DEEPSEEK_API_KEY']}"},
-              json={
-                  "model": "deepseek-chat",
-                  "messages": [
-                      {"role": "system", "content": "Ты меняешь только содержимое файла README.md. Возвращаешь только новый полный текст файла без лишних пояснений."},
-                      {"role": "user", "content": f"Текущее содержимое файла:\n---\n{current_text}\n---\n\nЗадача: {os.environ['INSTRUCTION']}\n\nНапиши новый полный текст файла с учётом задачи."}
-                  ]
-              }
+              headers=headers,
+              json=payload,
+              timeout=30
           )
-          new_text = response.json()["choices"][0]["message"]["content"]
-
+          
+          print(f"Статус ответа: {response.status_code}")
+          print(f"Заголовки: {dict(response.headers)}")
+          print(f"Тело ответа (первые 500 символов): {response.text[:500]}")
+          
+          if response.status_code != 200:
+              print(f"Ошибка API: {response.text}")
+              exit(1)
+          
+          result = response.json()
+          new_text = result["choices"][0]["message"]["content"]
+          
+          print("Новый текст получен. Длина:", len(new_text))
+          
           # Сохраняем изменения
           with open("README.md", "w", encoding="utf-8") as f:
               f.write(new_text)
+          
+          print("Файл обновлён")
           EOF
 
       - name: Commit and push changes
